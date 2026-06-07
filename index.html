@@ -1428,9 +1428,8 @@ document.addEventListener('DOMContentLoaded', () => {
   restoreImportedTabs();
   setupImportZone();
   renderOnboardingThemeGrid();
-  // Se já tem perfil salvo, esconde o onboarding (usuário retornando)
-  const savedProfile = JSON.parse(localStorage.getItem('app_profile') || '{}');
-  if (savedProfile.nome) {
+  // Se já completou o onboarding, esconde a aba INÍCIO
+  if (localStorage.getItem('onboarding_done')) {
     const welcomeBtn = document.getElementById('tab-btn-welcome');
     const welcomeTab = document.getElementById('tab-welcome');
     if (welcomeBtn) welcomeBtn.remove();
@@ -1782,21 +1781,24 @@ function confirmarImportOb() {
 }
 
 function salvarOnboarding() {
-  // Salva perfil
   const nome = document.getElementById('ob-nome').value.trim();
   const sobrenome = document.getElementById('ob-sobrenome').value.trim();
   const subtitulo = document.getElementById('ob-subtitulo').value.trim();
   const aviso = document.getElementById('ob-aviso').value.trim();
-  if (nome || sobrenome) {
-    localStorage.setItem('app_profile', JSON.stringify({ nome, sobrenome, subtitulo, aviso }));
-    aplicarPerfil({ nome, sobrenome, subtitulo, aviso });
-  }
-  // Esconde aba de boas-vindas se há treinos importados
+
+  // Salva sempre, mesmo que parcialmente preenchido
+  const perfil = { nome, sobrenome, subtitulo, aviso };
+  localStorage.setItem('app_profile', JSON.stringify(perfil));
+  localStorage.setItem('onboarding_done', '1');
+  aplicarPerfil(perfil);
+
   const hasTreinos = Object.keys(JSON.parse(localStorage.getItem('imported_tabs') || '{}')).length > 0;
   if (hasTreinos) {
     hideWelcomeTab();
   } else {
-    showToast('Perfil salvo! Importe um treino para continuar.', 'var(--accent)');
+    // Esconde o onboarding mesmo sem treinos — a pessoa pode importar depois pela engrenagem
+    hideWelcomeTab();
+    showToast('Perfil salvo! Importe seu treino pela engrenagem ⚙ quando quiser.', 'var(--accent)');
   }
 }
 
@@ -1827,7 +1829,7 @@ function buildTreinoTabHtml(tabId, nome, exs) {
                        : ex.flag === 'tip' ? '<span class="flag flag-tip">DICA</span> ' : '';
         const videoHtml = ex.video ? `<a href="${ex.video}" target="_blank" class="video-link">▶</a>` : '';
         const exKey = (ex.exercicio + '_' + tabId).replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 40);
-        return `<div class="ex-card" data-ex="${exKey}" data-series="${ex.series}">
+        return `<div class="ex-card" data-ex="${exKey}" data-ex-label="${ex.exercicio}" data-series="${ex.series}">
           <div class="ex-row1">
             <div class="ex-name">${ex.exercicio} ${videoHtml}</div>
             <div class="series-reps">${ex.series} × ${ex.reps}</div>
@@ -2008,7 +2010,7 @@ function toggleWorkout(letter) {
     const localAcademia = gymInput.value.trim() || 'Academia';
     
     cards.forEach(c => {
-      const exName = c.getAttribute('data-ex');
+      const exName = c.getAttribute('data-ex-label') || c.getAttribute('data-ex');
       const rows = c.querySelectorAll('.inputs-row');
       let seriesReport = [];
       rows.forEach((row, idx) => {
