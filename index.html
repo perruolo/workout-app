@@ -1732,7 +1732,7 @@ function confirmarImport() {
 
     // Insere nova aba antes da tela de boas-vindas
     const welcomeTab = document.getElementById('tab-welcome');
-    welcomeTab.insertAdjacentHTML('beforebegin', buildTreinoTabHtml(tabId, nome, exs));
+    document.getElementById('tab-extra').insertAdjacentHTML('beforebegin', buildTreinoTabHtml(tabId, nome, exs));
 
     // Atualiza ou cria botão na tab bar
     const dynamicBtn = tabsEl.querySelector(`[data-tabid="${tabId}"]`);
@@ -1834,7 +1834,7 @@ function buildTreinoTabHtml(tabId, nome, exs) {
             <div class="ex-name">${ex.exercicio} ${videoHtml}</div>
             <div class="series-reps">${ex.series} × ${ex.reps}</div>
           </div>
-          ${ex.obs ? `<div class="obs">${flagHtml}${ex.obs}</div>` : ''}
+          ${(flagHtml || ex.obs) ? `<div class="obs">${flagHtml}${ex.obs || ''}</div>` : ''}
           <div class="tracker-panel"></div>
         </div>`;
       }).join('')}
@@ -1894,7 +1894,7 @@ function restoreImportedTabs() {
     const exs = savedData[nome];
     if (!exs) return;
     const welcomeTab = document.getElementById('tab-welcome');
-    welcomeTab.insertAdjacentHTML('beforebegin', buildTreinoTabHtml(tabId, nome, exs));
+    document.getElementById('tab-extra').insertAdjacentHTML('beforebegin', buildTreinoTabHtml(tabId, nome, exs));
     const newBtn = document.createElement('button');
     newBtn.className = 'tab';
     newBtn.setAttribute('data-tabid', tabId);
