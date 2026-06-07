@@ -99,7 +99,7 @@
     display: flex;
     gap: 6px;
     overflow-x: auto;
-    padding-bottom: 4px;
+    padding-bottom: 8px;
     scrollbar-width: thin;
     scrollbar-color: var(--accent) var(--surface2);
   }
@@ -2231,40 +2231,89 @@ function getMetrica(card) {
 }
 
 function buildInputRow(exName, i, numSeries, metrica) {
-  const saved = JSON.parse(localStorage.getItem(`weight2_${exName}_s${i}`) || 'null');
-  const val = saved ? saved.val : (localStorage.getItem(`weight_${exName}_s${i}`) || '');
+  const saved = JSON.parse(localStorage.getItem('weight2_' + exName + '_s' + i) || 'null');
+  const val = saved ? saved.val : (localStorage.getItem('weight_' + exName + '_s' + i) || '');
 
   const row = document.createElement('div');
   row.className = 'inputs-row';
   row.setAttribute('data-serie-index', i);
 
-  let inputHtml;
+  const lbl = document.createElement('span');
+  lbl.className = 'serie-lbl';
+  lbl.textContent = 'Série ' + i;
+  row.appendChild(lbl);
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'input-wrapper';
+
+  const skipBtn = document.createElement('button');
+  skipBtn.className = 'skip-btn';
+  skipBtn.title = 'Omitir série';
+  skipBtn.textContent = '❌';
+  skipBtn.onclick = function() { toggleSkip(this); };
+
   if (metrica === 'tempo') {
-    inputHtml = `<input type="text" class="input-carga" placeholder="min" value="${val}"
-      oninput="handleInputChange2('${exName}', ${i}, this, ${numSeries})"
-      onkeydown="handleInputKeydown('${exName}', ${i}, this, ${numSeries}, event)">
-      <span class="input-kg-label">min</span>`;
-  } else if (metrica === 'reps') {
-    inputHtml = `<input type="number" class="input-carga" placeholder=" " value="${val}" step="1" min="0"
-      oninput="handleInputChange2('${exName}', ${i}, this, ${numSeries})"
-      onkeydown="handleInputKeydown('${exName}', ${i}, this, ${numSeries}, event)">
-      <span class="input-kg-label">reps</span>`;
+    const totalSecs = parseInt(val) || 0;
+    const savedMin = Math.floor(totalSecs / 60);
+    const savedSec = totalSecs % 60;
+
+    const minInput = document.createElement('input');
+    minInput.type = 'number'; minInput.min = '0'; minInput.step = '1';
+    minInput.className = 'input-carga'; minInput.style.width = '52px';
+    minInput.placeholder = '0'; if (savedMin) minInput.value = savedMin;
+
+    const minLbl = document.createElement('span');
+    minLbl.className = 'input-kg-label'; minLbl.textContent = 'min';
+
+    const secInput = document.createElement('input');
+    secInput.type = 'number'; secInput.min = '0'; secInput.max = '59'; secInput.step = '1';
+    secInput.className = 'input-carga'; secInput.style.width = '52px';
+    secInput.placeholder = '00'; if (savedSec) secInput.value = savedSec;
+
+    const secLbl = document.createElement('span');
+    secLbl.className = 'input-kg-label'; secLbl.textContent = 'seg';
+
+    const saveTime = function() {
+      const m = parseInt(minInput.value) || 0;
+      const s = Math.min(parseInt(secInput.value) || 0, 59);
+      const total = String(m * 60 + s);
+      localStorage.setItem('weight2_' + exName + '_s' + i, JSON.stringify({ val: total }));
+      localStorage.setItem('weight_' + exName + '_s' + i, total);
+    };
+    minInput.addEventListener('input', saveTime);
+    secInput.addEventListener('input', saveTime);
+    minInput.addEventListener('blur', function() { if (activeWorkoutLetter) startRestTimer(); });
+    secInput.addEventListener('blur', function() { if (activeWorkoutLetter) startRestTimer(); });
+
+    wrapper.appendChild(minInput);
+    wrapper.appendChild(minLbl);
+    wrapper.appendChild(secInput);
+    wrapper.appendChild(secLbl);
+    wrapper.appendChild(skipBtn);
   } else {
-    inputHtml = `<input type="number" class="input-carga" placeholder=" " value="${val}" step="0.5" min="0"
-      oninput="handleInputChange2('${exName}', ${i}, this, ${numSeries})"
-      onkeydown="handleInputKeydown('${exName}', ${i}, this, ${numSeries}, event)">
-      <span class="input-kg-label">kg</span>`;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'input-carga';
+    input.placeholder = ' ';
+    input.value = val;
+    input.step = metrica === 'reps' ? '1' : '0.5';
+    input.min = '0';
+    if (metrica === 'reps') input.max = '9999';
+
+    input.addEventListener('input', function() { handleInputChange2(exName, i, this, numSeries); });
+    input.addEventListener('keydown', function(e) { handleInputKeydown(exName, i, this, numSeries, e); });
+    input.addEventListener('blur', function() { if (activeWorkoutLetter) startRestTimer(); });
+
+    const unitLbl = document.createElement('span');
+    unitLbl.className = 'input-kg-label';
+    unitLbl.textContent = metrica === 'reps' ? 'reps' : 'kg';
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(unitLbl);
+    wrapper.appendChild(skipBtn);
   }
 
-  row.innerHTML = `<span class="serie-lbl">Série ${i}</span>
-    <div class="input-wrapper">
-      ${inputHtml}
-      <button class="skip-btn" title="Omitir série" onclick="toggleSkip(this)">❌</button>
-    </div>`;
-
-  row.querySelector('.input-carga').addEventListener('blur', () => {
-    if (activeWorkoutLetter) startRestTimer();
-  });
+  row.appendChild(wrapper);
   return row;
 }
 
@@ -2442,21 +2491,31 @@ function parseHistoryForEx(exName) {
     if (item.isExtra) return;
     const lines = (item.details || '').split('\n');
     lines.forEach(line => {
-      // Match: • ExercícioNome -> S1: 20kg | S2: 30kg
       const matchName = line.match(/^•\s+(.+?)\s+->/);
       if (!matchName) return;
       const lineName = matchName[1].trim().toLowerCase();
       if (!lineName.includes(exName.toLowerCase().slice(0,8)) &&
           !exName.toLowerCase().includes(lineName.slice(0,8))) return;
 
-      // Extrai todos os valores numéricos de kg da linha
+      // Detecta unidade: kg, reps ou min/tempo (em segundos)
+      let values = [];
+      let unit = 'kg';
       const kgMatches = [...line.matchAll(/(\d+(?:\.\d+)?)kg/g)].map(m => parseFloat(m[1]));
-      if (kgMatches.length === 0) return;
+      const repsMatches = [...line.matchAll(/(\d+(?:\.\d+)?)reps/g)].map(m => parseFloat(m[1]));
+      // MM:SSmin format (e.g. 35:20min) or plain seconds
+      const mmssMatches = [...line.matchAll(/(\d{1,2}):(\d{2})min/g)].map(m => parseInt(m[1])*60 + parseInt(m[2]));
+      const minMatches = mmssMatches.length > 0 ? mmssMatches : [...line.matchAll(/(\d+(?:\.\d+)?)min/g)].map(m => parseFloat(m[1]) * 60);
 
-      const pr   = Math.max(...kgMatches);
-      const moda = calcModa(kgMatches);
+      if (kgMatches.length > 0) { values = kgMatches; unit = 'kg'; }
+      else if (repsMatches.length > 0) { values = repsMatches; unit = 'reps'; }
+      else if (minMatches.length > 0) { values = minMatches; unit = 'seg'; }
 
-      points.push({ date: item.date.split(' às')[0], pr, moda });
+      if (values.length === 0) return;
+
+      const pr   = Math.max(...values);
+      const moda = calcModa(values);
+
+      points.push({ date: item.date.split(' às')[0], pr, moda, unit });
     });
   });
 
@@ -2489,6 +2548,7 @@ function renderChart() {
 
   const labels = points.map(p => p.date);
   const values = points.map(p => chartCurrentMode === 'pr' ? p.pr : p.moda);
+  const unit = points[0].unit || 'kg';
   const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
   const surface2 = getComputedStyle(document.documentElement).getPropertyValue('--surface2').trim();
   const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
@@ -2514,7 +2574,7 @@ function renderChart() {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.parsed.y}kg`
+            label: ctx => ctx.parsed.y + unit
           }
         }
       },
@@ -2524,7 +2584,7 @@ function renderChart() {
           grid: { color: surface2 }
         },
         y: {
-          ticks: { color: muted, callback: v => v + 'kg' },
+          ticks: { color: muted, callback: v => v + unit },
           grid: { color: surface2 }
         }
       }
@@ -2532,19 +2592,66 @@ function renderChart() {
   });
 
   // Stats
+  const fmt = v => {
+    if (unit === 'seg') {
+      const m = Math.floor(v / 60);
+      const s = Math.round(v % 60);
+      return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    }
+    return unit === 'kg' ? v : Math.round(v);
+  };
+  const unitLabel = unit === 'seg' ? 'min' : unit;
   const max = Math.max(...values);
   const last = values[values.length - 1];
   const first = values[0];
   const gain = last - first;
-  const gainStr = (gain >= 0 ? '+' : '') + gain.toFixed(1) + 'kg';
+  const gainStr = (gain >= 0 ? '+' : '') + fmt(gain) + unitLabel;
+
+  chartInstance = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: accent,
+        backgroundColor: accent + '22',
+        pointBackgroundColor: accent,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => fmt(ctx.parsed.y) + unitLabel
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: muted, font: { size: 10 }, maxRotation: 30 },
+          grid: { color: surface2 }
+        },
+        y: {
+          ticks: { color: muted, callback: v => fmt(v) + unitLabel },
+          grid: { color: surface2 }
+        }
+      }
+    }
+  });
 
   stats.innerHTML = `
     <div class="chart-stat">
-      <div class="chart-stat-val">${max}kg</div>
+      <div class="chart-stat-val">${fmt(max)}${unitLabel}</div>
       <div class="chart-stat-lbl">🏆 Recorde</div>
     </div>
     <div class="chart-stat">
-      <div class="chart-stat-val">${last}kg</div>
+      <div class="chart-stat-val">${fmt(last)}${unitLabel}</div>
       <div class="chart-stat-lbl">📍 Último</div>
     </div>
     <div class="chart-stat">
@@ -2659,9 +2766,20 @@ function toggleWorkout(letter) {
       let seriesReport = [];
       rows.forEach((row, idx) => {
         if (!row.classList.contains('skipped')) {
-          const input = row.querySelector('.input-carga');
-          const val = input.value;
-          seriesReport.push('S' + (idx+1) + ': ' + (val !== '' ? val + unit : 'Completo'));
+          if (metrica === 'tempo') {
+            const inputs = row.querySelectorAll('.input-carga');
+            if (inputs.length >= 2) {
+              const m = parseInt(inputs[0].value) || 0;
+              const s = Math.min(parseInt(inputs[1].value) || 0, 59);
+              const total = m * 60 + s;
+              const fmt = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+              seriesReport.push('S' + (idx+1) + ': ' + (total > 0 ? fmt + 'min' : 'Completo'));
+            }
+          } else {
+            const input = row.querySelector('.input-carga');
+            const val = input ? input.value : '';
+            seriesReport.push('S' + (idx+1) + ': ' + (val !== '' ? val + unit : 'Completo'));
+          }
         }
       });
       const comentario = c.querySelector('.ex-comment-input');
