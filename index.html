@@ -904,7 +904,36 @@
   }
 
   /* Placeholder de carga anterior */
-  .input-carga.has-suggestion::placeholder { color: #555; font-style: italic; }
+  .ex-comment-wrap {
+    display: none;
+    padding: 8px 0 4px;
+  }
+  .ex-card.active-workout .ex-comment-wrap { display: block; }
+  .ex-comment-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--accent);
+    color: var(--text);
+    font-size: 12px;
+    font-family: 'DM Sans', sans-serif;
+    padding: 7px 10px;
+    border-radius: 0 4px 4px 0;
+    resize: none;
+  }
+  .ex-comment-input:focus { outline: none; border-color: var(--accent); }
+  .input-carga {
+    width: 80px;
+    text-align: center;
+    -moz-appearance: textfield;
+  }
+  .input-carga::-webkit-outer-spin-button,
+  .input-carga::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .input-kg-label {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 600;
+  }
 
   .table-schedule {
     width: 100%;
@@ -1218,8 +1247,9 @@ function salvarPerfil() {
   const sobrenome = document.getElementById('cfg-sobrenome').value.trim();
   const subtitulo = document.getElementById('cfg-subtitulo').value.trim();
   const aviso = document.getElementById('cfg-aviso').value.trim();
-  localStorage.setItem('app_profile', JSON.stringify({ nome, sobrenome, subtitulo, aviso }));
-  aplicarPerfil({ nome, sobrenome, subtitulo, aviso });
+  const perfil = { nome, sobrenome, subtitulo, aviso };
+  localStorage.setItem('app_profile', JSON.stringify(perfil));
+  aplicarPerfil(perfil);
   closeSettings();
   showToast('Perfil atualizado! ✓');
 }
@@ -1417,11 +1447,14 @@ function applyLastSessionSuggestions(tabId) {
 
     card.querySelectorAll('.inputs-row').forEach(row => {
       const idx = row.getAttribute('data-serie-index');
-      const val = dados[`s${idx}`];
-      if (!val || val === 'Completo') return;
+      const rawVal = dados[`s${idx}`];
+      if (!rawVal || rawVal === 'Completo') return;
       const input = row.querySelector('.input-carga');
       if (input && !input.value) {
-        input.placeholder = `↑ ${val}`;
+        // Extrai só o número digitado (ex: "20kg×2=40kg" → "20", "30kg" → "30")
+        const numMatch = rawVal.match(/^([\d.]+)kg/);
+        const displayVal = numMatch ? numMatch[1] : rawVal.replace('kg','').trim();
+        input.placeholder = `↑ ${displayVal}`;
         input.classList.add('has-suggestion');
       }
     });
@@ -1529,25 +1562,25 @@ function handleCsvUpload(input) {
 
 function baixarModeloCsv() {
   const linhas = [
-    'Treino;Secao;Exercicio;Series;Reps;Obs;Flag;Video',
-    'Fullbody 1;Membros Superiores;Supino Reto com Halteres;3;10;Controle na descida;;',
-    'Fullbody 1;Membros Superiores;Remada Baixa;3;10;Postura firme;;',
-    'Fullbody 1;Membros Superiores;Desenvolvimento com Halteres;3;12;Cotovelos levemente fechados;;',
-    'Fullbody 1;Membros Inferiores & Cardio;Leg Press 45;3;12;Pé alto na plataforma;joelho;',
-    'Fullbody 1;Membros Inferiores & Cardio;Mesa Flexora;4;12;Posterior forte blinda o joelho;tip;',
-    'Fullbody 1;Membros Inferiores & Cardio;Cardio (Esteira Inclinada);1;30-40min;Sem impacto;;',
-    'Fullbody 2;Membros Superiores;Puxada Articulada Aberta;3;10;Depressão das escápulas;;',
-    'Fullbody 2;Membros Superiores;Supino Inclinado com Halteres;3;10;Fase excêntrica controlada;;',
-    'Fullbody 2;Membros Superiores;Rosca Direta com Halteres;3;10;Sem oscilar o tronco;;',
-    'Fullbody 2;Membros Inferiores & Cardio;Cadeira Flexora;4;12;Priorize intensidade aqui;tip;',
-    'Fullbody 2;Membros Inferiores & Cardio;Cardio (Bike);1;30-40min;Queima calórica sem impacto;;',
-    'Fullbody 3;Membros Superiores;Puxada Neutra Barra H;3;10;Protege os ombros;;',
-    'Fullbody 3;Membros Superiores;Crucifixo Inverso;3;12;Porção posterior do ombro;;',
-    'Fullbody 3;Membros Superiores;Rosca Martelo Alternada;3;10;Braquiorradial e bíceps;;',
-    'Fullbody 3;Membros Inferiores & Cardio;Panturrilha no Smith;3;12;1s no pico de contração;;',
-    'Fullbody 3;Membros Inferiores & Cardio;Cardio (Esteira Inclinada);1;30-40min;Fechamento calórico;;',
-    'Fullbody 4;Membros Inferiores & Cardio;Glúteo Máquina;4;4 a 6SM;Tente progredir ao menos 1kg em cada série;tip;',
-    'Fullbody 4;Membros Superiores;Tríceps Pulley;5;25;Warmup, Feeder, Reservas e Máximas;tip;https://www.youtube.com/watch?v=re-ILvqD1RE',
+    'Treino;Secao;Exercicio;Series;Reps;Obs;Flag;Video;Unidade',
+    'Fullbody 1;Membros Superiores;Supino Reto com Halteres;3;10;Controle na descida;;;halter',
+    'Fullbody 1;Membros Superiores;Remada Baixa;3;10;Postura firme;;;maquina',
+    'Fullbody 1;Membros Superiores;Desenvolvimento com Halteres;3;12;Cotovelos levemente fechados;;;halter',
+    'Fullbody 1;Membros Inferiores & Cardio;Leg Press 45;3;12;Pé alto na plataforma;joelho;;maquina',
+    'Fullbody 1;Membros Inferiores & Cardio;Mesa Flexora;4;12;Posterior forte blinda o joelho;tip;;maquina',
+    'Fullbody 1;Membros Inferiores & Cardio;Cardio (Esteira Inclinada);1;30-40min;Sem impacto;;;corporal',
+    'Fullbody 2;Membros Superiores;Puxada Articulada Aberta;3;10;Depressão das escápulas;;;maquina',
+    'Fullbody 2;Membros Superiores;Supino Inclinado com Halteres;3;10;Fase excêntrica controlada;;;halter',
+    'Fullbody 2;Membros Superiores;Rosca Direta com Halteres;3;10;Sem oscilar o tronco;;;halter',
+    'Fullbody 2;Membros Inferiores & Cardio;Cadeira Flexora;4;12;Priorize intensidade aqui;tip;;maquina',
+    'Fullbody 2;Membros Inferiores & Cardio;Cardio (Bike);1;30-40min;Queima calórica sem impacto;;;corporal',
+    'Fullbody 3;Membros Superiores;Puxada Neutra Barra H;3;10;Protege os ombros;;;maquina',
+    'Fullbody 3;Membros Superiores;Crucifixo Inverso;3;12;Porção posterior do ombro;;;halter',
+    'Fullbody 3;Membros Superiores;Rosca Martelo Alternada;3;10;Braquiorradial e bíceps;;;halter',
+    'Fullbody 3;Membros Inferiores & Cardio;Panturrilha no Smith;3;12;1s no pico de contração;;;maquina',
+    'Fullbody 3;Membros Inferiores & Cardio;Cardio (Esteira Inclinada);1;30-40min;Fechamento calórico;;;corporal',
+    'Fullbody 4;Membros Inferiores & Cardio;Glúteo Máquina;4;4 a 6SM;Tente progredir ao menos 1kg em cada série;tip;;maquina',
+    'Fullbody 4;Membros Superiores;Tríceps Pulley;5;25;Warmup, Feeder, Reservas e Máximas;tip;https://www.youtube.com/watch?v=re-ILvqD1RE;maquina',
   ];
   const conteudo = linhas.join('\n');
   const blob = new Blob([conteudo], { type: 'text/csv;charset=utf-8' });
@@ -1582,9 +1615,10 @@ function parseCsv(text) {
     const exercicio = cols[2] || ''; const series = cols[3] || '3';
     const reps = cols[4] || '10'; const obs = cols[5] || '';
     const flag = (cols[6] || '').toLowerCase().trim(); const video = cols[7] || '';
+    const unidade = (cols[8] || 'maquina').toLowerCase().trim();
     if (!treino || !exercicio) return;
     if (!parsedCsvTreinos[treino]) parsedCsvTreinos[treino] = [];
-    parsedCsvTreinos[treino].push({ secao, exercicio, series, reps, obs, flag, video });
+    parsedCsvTreinos[treino].push({ secao, exercicio, series, reps, obs, flag, video, unidade });
   });
 
   if (Object.keys(parsedCsvTreinos).length === 0) { showToast('Nenhum exercício válido. Verifique o formato.', 'var(--danger)'); return; }
@@ -1815,7 +1849,6 @@ function salvarOnboarding() {
   const subtitulo = document.getElementById('ob-subtitulo').value.trim();
   const aviso = document.getElementById('ob-aviso').value.trim();
 
-  // Salva sempre, mesmo que parcialmente preenchido
   const perfil = { nome, sobrenome, subtitulo, aviso };
   localStorage.setItem('app_profile', JSON.stringify(perfil));
   localStorage.setItem('onboarding_done', '1');
@@ -1858,7 +1891,8 @@ function buildTreinoTabHtml(tabId, nome, exs) {
                        : ex.flag === 'tip' ? '<span class="flag flag-tip">DICA</span> ' : '';
         const videoHtml = ex.video ? `<a href="${ex.video}" target="_blank" class="video-link"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><polygon points="2,1 11,6 2,11"/></svg></a>` : '';
         const exKey = (ex.exercicio + '_' + tabId).replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 40);
-        return `<div class="ex-card" data-ex="${exKey}" data-ex-label="${ex.exercicio}" data-series="${ex.series}">
+        const unidade = ex.unidade || 'maquina'; // halter, barra, maquina, corporal
+        return `<div class="ex-card" data-ex="${exKey}" data-ex-label="${ex.exercicio}" data-series="${ex.series}" data-unidade="${unidade}">
           <div class="ex-row1">
             <div class="ex-name">${ex.exercicio} ${videoHtml}</div>
             <div class="series-reps">${ex.series} × ${ex.reps}</div>
@@ -1886,28 +1920,95 @@ function buildTreinoTabHtml(tabId, nome, exs) {
   </div>`;
 }
 
+function buildInputRow(exName, i, numSeries, isTime) {
+  const saved = JSON.parse(localStorage.getItem(`weight2_${exName}_s${i}`) || 'null');
+  const val = saved ? saved.val : (localStorage.getItem(`weight_${exName}_s${i}`) || '');
+
+  const row = document.createElement('div');
+  row.className = 'inputs-row';
+  row.setAttribute('data-serie-index', i);
+
+  if (isTime) {
+    row.innerHTML = `<span class="serie-lbl">Série ${i}</span>
+      <div class="input-wrapper">
+        <input type="text" class="input-carga" placeholder="Tempo" value="${val}"
+               oninput="handleInputChange('${exName}', ${i}, this, ${numSeries})">
+        <button class="skip-btn" title="Omitir série" onclick="toggleSkip(this)">❌</button>
+      </div>`;
+  } else {
+    row.innerHTML = `<span class="serie-lbl">Série ${i}</span>
+      <div class="input-wrapper">
+        <input type="number" class="input-carga" placeholder=" " value="${val}" step="0.5" min="0"
+               oninput="handleInputChange2('${exName}', ${i}, this, ${numSeries})"
+               onkeydown="handleInputKeydown('${exName}', ${i}, this, ${numSeries}, event)">
+        <span class="input-kg-label">kg</span>
+        <button class="skip-btn" title="Omitir série" onclick="toggleSkip(this)">❌</button>
+      </div>`;
+  }
+
+  const input = row.querySelector('.input-carga');
+  input.addEventListener('blur', () => {
+    if (activeWorkoutLetter) startRestTimer();
+  });
+  return row;
+}
+
+function handleInputChange2(ex, currentSerie, inputEl, totalSeries) {
+  const val = inputEl.value;
+  localStorage.setItem(`weight2_${ex}_s${currentSerie}`, JSON.stringify({ val }));
+  localStorage.setItem(`weight_${ex}_s${currentSerie}`, val);
+
+  // Propaga pras séries seguintes que estão vazias ou com o mesmo valor anterior
+  const panel = inputEl.closest('.tracker-panel');
+  const allRows = panel.querySelectorAll('.inputs-row');
+  for (let j = currentSerie; j < totalSeries; j++) {
+    const nextRow = allRows[j];
+    if (!nextRow || nextRow.classList.contains('skipped')) continue;
+    const nextInput = nextRow.querySelector('.input-carga');
+    if (!nextInput) continue;
+    const nextVal = nextInput.value;
+    // Só propaga se a série seguinte estiver vazia ou igual ao valor que estávamos digitando antes
+    const prevSaved = localStorage.getItem(`weight_${ex}_s${j+1}`) || '';
+    if (nextVal === '' || nextVal === prevSaved) {
+      nextInput.value = val;
+      localStorage.setItem(`weight2_${ex}_s${j+1}`, JSON.stringify({ val }));
+      localStorage.setItem(`weight_${ex}_s${j+1}`, val);
+    } else {
+      break; // para ao encontrar uma série com valor diferente (editada manualmente)
+    }
+  }
+}
+
+function handleInputKeydown(ex, currentSerie, inputEl, totalSeries, event) {
+  if (event.key === 'Enter' || event.key === 'Tab') {
+    event.preventDefault();
+    if (currentSerie < totalSeries) {
+      const allRows = inputEl.closest('.tracker-panel').querySelectorAll('.inputs-row');
+      const nextRow = allRows[currentSerie]; // currentSerie já é o índice da próxima (base 1 → array base 0)
+      if (nextRow && !nextRow.classList.contains('skipped')) {
+        nextRow.querySelector('.input-carga').focus();
+      }
+    }
+  }
+}
+
 function setupSingleCard(card) {
   const panel = card.querySelector('.tracker-panel');
   const exName = card.getAttribute('data-ex');
   const numSeries = parseInt(card.getAttribute('data-series'));
   const isTime = card.getAttribute('data-is-time') === 'true';
-  const labelUnidade = isTime ? "Tempo" : "Kg";
   panel.innerHTML = '';
   for (let i = 1; i <= numSeries; i++) {
-    const saved = localStorage.getItem(`weight_${exName}_s${i}`) || '';
-    const row = document.createElement('div');
-    row.className = 'inputs-row';
-    row.setAttribute('data-serie-index', i);
-    row.innerHTML = `<span class="serie-lbl">Série ${i}</span>
-      <div class="input-wrapper">
-        <input type="text" class="input-carga" placeholder="${labelUnidade}" value="${saved}"
-               oninput="handleInputChange('${exName}', ${i}, this, ${numSeries})">
-        <button class="skip-btn" title="Omitir série" onclick="toggleSkip(this)">❌</button>
-      </div>`;
-    row.querySelector('.input-carga').addEventListener('blur', () => {
-      if (activeWorkoutLetter) startRestTimer();
-    });
-    panel.appendChild(row);
+    panel.appendChild(buildInputRow(exName, i, numSeries, isTime));
+  }
+  // Adiciona campo de comentário se não existe
+  if (!card.querySelector('.ex-comment-wrap')) {
+    const saved = localStorage.getItem(`comment_${exName}`) || '';
+    const commentDiv = document.createElement('div');
+    commentDiv.className = 'ex-comment-wrap';
+    commentDiv.innerHTML = `<textarea class="ex-comment-input" rows="1" placeholder="Comentário (opcional): ex. 20kg cada lado, senti dor, etc."
+      oninput="localStorage.setItem('comment_${exName}', this.value)">${saved}</textarea>`;
+    card.appendChild(commentDiv);
   }
 }
 
@@ -1999,29 +2100,17 @@ function setupInputs() {
     const exName = card.getAttribute('data-ex');
     const numSeries = parseInt(card.getAttribute('data-series'));
     const isTime = card.getAttribute('data-is-time') === 'true';
-    const labelUnidade = isTime ? "Tempo" : "Kg";
-
     panel.innerHTML = '';
-
     for (let i = 1; i <= numSeries; i++) {
-      const storageKey = `weight_${exName}_s${i}`;
-      const savedValue = localStorage.getItem(storageKey) || '';
-
-      const row = document.createElement('div');
-      row.className = 'inputs-row';
-      row.setAttribute('data-serie-index', i);
-      row.innerHTML = `
-        <span class="serie-lbl">Série ${i}</span>
-        <div class="input-wrapper">
-          <input type="text" class="input-carga" placeholder="${labelUnidade}" value="${savedValue}" 
-                 oninput="handleInputChange('${exName}', ${i}, this, ${numSeries})">
-          <button class="skip-btn" title="Omitir série" onclick="toggleSkip(this)">❌</button>
-        </div>
-      `;
-      row.querySelector('.input-carga').addEventListener('blur', () => {
-        if (activeWorkoutLetter) startRestTimer();
-      });
-      panel.appendChild(row);
+      panel.appendChild(buildInputRow(exName, i, numSeries, isTime));
+    }
+    if (!card.querySelector('.ex-comment-wrap')) {
+      const saved = localStorage.getItem(`comment_${exName}`) || '';
+      const commentDiv = document.createElement('div');
+      commentDiv.className = 'ex-comment-wrap';
+      commentDiv.innerHTML = `<textarea class="ex-comment-input" rows="1" placeholder="Comentário (opcional): ex. 20kg cada lado, senti dor, etc."
+        oninput="localStorage.setItem('comment_${exName}', this.value)">${saved}</textarea>`;
+      card.appendChild(commentDiv);
     }
   });
 }
@@ -2087,18 +2176,25 @@ function toggleWorkout(letter) {
     let reportData = [];
     const localAcademia = gymInput.value.trim() || 'Academia';
     
+    const perSide = false;
     cards.forEach(c => {
       const exName = c.getAttribute('data-ex-label') || c.getAttribute('data-ex');
       const rows = c.querySelectorAll('.inputs-row');
       let seriesReport = [];
       rows.forEach((row, idx) => {
         if (!row.classList.contains('skipped')) {
-          const inputVal = row.querySelector('.input-carga').value || 'Completo';
-          seriesReport.push(`S${idx+1}: ${inputVal}`);
+          const input = row.querySelector('.input-carga');
+          const val = input.value;
+          seriesReport.push(`S${idx+1}: ${val !== '' ? val + 'kg' : 'Completo'}`);
         }
       });
+      // Pega comentário do exercício se houver
+      const comentario = c.querySelector('.ex-comment-input');
+      const comentarioVal = comentario ? comentario.value.trim() : '';
       if (seriesReport.length > 0) {
-        reportData.push(`• ${exName} -> ${seriesReport.join(' | ')}`);
+        let linha = `• ${exName} -> ${seriesReport.join(' | ')}`;
+        if (comentarioVal) linha += ` [${comentarioVal}]`;
+        reportData.push(linha);
       }
     });
 
