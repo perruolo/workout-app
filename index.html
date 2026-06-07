@@ -1117,6 +1117,7 @@
   <div class="treino-header"><div class="treino-title"><span>Acompanhamento</span>HISTÓRICO</div></div>
   <div class="history-actions">
     <button class="hist-btn" style="border:1px solid var(--accent);color:var(--accent);" onclick="exportHistory()">📤 Exportar (.txt)</button>
+    <button class="hist-btn" style="border:1px solid var(--accent);color:var(--accent);" onclick="exportHistoryCsv()">📊 Exportar (.csv)</button>
     <button class="hist-btn" style="border:1px solid var(--danger);color:var(--danger);" onclick="clearHistory()">🗑 Limpar Tudo</button>
   </div>
   <div id="history-container">
@@ -2233,37 +2234,85 @@ function showConfirm(msg, onYes) {
 }
 
 function exportHistory() {
-  let history = JSON.parse(localStorage.getItem('workout_history')) || [];
-  
-  if (history.length === 0) {
-    showToast('Nenhum treino no histórico para exportar.', 'var(--muted)');
-    return;
-  }
+  const history = JSON.parse(localStorage.getItem('workout_history')) || [];
+  if (history.length === 0) { showToast('Nenhum treino no histórico para exportar.', 'var(--muted)'); return; }
 
-  let txtContent = "=========================================\n";
-  txtContent += "    HISTÓRICO DE TREINOS - PEDRO PERRUOLO\n";
-  txtContent += "=========================================\n\n";
+  const p = JSON.parse(localStorage.getItem('app_profile') || '{}');
+  const nomeCompleto = `${p.nome || ''} ${p.sobrenome || ''}`.trim() || 'Usuário';
+  const hoje = new Date().toISOString().slice(0,10);
 
-  history.forEach((item, index) => {
-    txtContent += `Treino #${history.length - index}\n`;
-    txtContent += `Data: ${item.date}\n`;
-    txtContent += `Local: ${item.gym || 'Não informado'}\n`;
-    txtContent += `Sessão: ${item.title}\n`;
-    txtContent += `Detalhes das Cargas:\n`;
-    txtContent += `${item.details}\n`;
-    txtContent += "-----------------------------------------\n\n";
+  let txt = `=========================================\n`;
+  txt += `    HISTÓRICO DE TREINOS - ${nomeCompleto.toUpperCase()}\n`;
+  txt += `=========================================\n\n`;
+  history.forEach((item, i) => {
+    txt += `Treino #${history.length - i}\n`;
+    txt += `Data: ${item.date}\n`;
+    txt += `Local: ${item.gym || 'Não informado'}\n`;
+    txt += `Sessão: ${item.title}\n`;
+    txt += `Detalhes:\n${item.details}\n`;
+    txt += `-----------------------------------------\n\n`;
   });
 
-  const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+  downloadBlob(txt, `historico_${hoje}.txt`, 'text/plain;charset=utf-8');
+}
+
+function exportHistoryCsv() {
+  const history = JSON.parse(localStorage.getItem('workout_history')) || [];
+  if (history.length === 0) { showToast('Nenhum treino no histórico para exportar.', 'var(--muted)'); return; }
+
+  const hoje = new Date().toISOString().slice(0,10);
+  const rows = [['Data', 'Sessão', 'Local', 'Tipo', 'Exercício', 'Serie', 'Carga', 'Duração Total']];
+
+  history.forEach(item => {
+    const lines = (item.details || '').split('\n');
+    let duracao = '';
+    const exLines = [];
+
+    lines.forEach(line => {
+      if (line.startsWith('⏱')) {
+        duracao = line.replace('⏱ Duração total:', '').trim();
+      } else if (line.startsWith('•')) {
+        exLines.push(line);
+      } else if (line.startsWith('⏱ Duração:')) {
+        duracao = line.replace('⏱ Duração:', '').trim();
+      } else if (line.startsWith('📝')) {
+        exLines.push(line);
+      }
+    });
+
+    if (exLines.length === 0) {
+      // Atividade extra (sem exercícios detalhados)
+      rows.push([item.date, item.title, item.gym || '', item.isExtra ? 'Extra' : 'Treino', '', '', '', duracao]);
+    } else {
+      exLines.forEach(line => {
+        if (line.startsWith('•')) {
+          // Formato: • Exercício -> S1: 20kg | S2: 22kg
+          const match = line.match(/^•\s+(.+?)\s+->\s+(.+)$/);
+          if (match) {
+            const exName = match[1].trim();
+            const series = match[2].split('|');
+            series.forEach(s => {
+              const sm = s.trim().match(/^S(\d+):\s*(.+)$/);
+              if (sm) rows.push([item.date, item.title, item.gym || '', 'Treino', exName, `Série ${sm[1]}`, sm[2].trim(), duracao]);
+            });
+          }
+        }
+      });
+    }
+  });
+
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+  downloadBlob('\uFEFF' + csv, `historico_${hoje}.csv`, 'text/csv;charset=utf-8');
+}
+
+function downloadBlob(content, filename, type) {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
-  
   const link = document.createElement('a');
   link.href = url;
-  link.download = `historico_treinos_pedro_${new Date().toISOString().slice(0,10)}.txt`;
-  
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
-  
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
