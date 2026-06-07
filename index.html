@@ -1701,7 +1701,7 @@ function renderImportPreview() {
         <div class="preview-ex-list">
           ${exs.map(ex => `
             <div class="preview-ex-row">
-              <span class="preview-ex-name">${ex.exercicio}${ex.video ? ' <span style="color:var(--accent);font-size:10px">▶</span>' : ''}</span>
+              <span class="preview-ex-name">${ex.exercicio}${ex.video ? ' <svg width="10" height="10" viewBox="0 0 12 12" fill="var(--accent)" style="vertical-align:middle"><polygon points="2,1 11,6 2,11"/></svg>' : ''}</span>
               <span class="preview-ex-meta">${ex.series}×${ex.reps}</span>
             </div>`).join('')}
         </div>
@@ -1855,7 +1855,7 @@ function buildTreinoTabHtml(tabId, nome, exs) {
       ${items.map(ex => {
         const flagHtml = ex.flag === 'joelho' ? '<span class="flag flag-knee">JOELHO</span> '
                        : ex.flag === 'tip' ? '<span class="flag flag-tip">DICA</span> ' : '';
-        const videoHtml = ex.video ? `<a href="${ex.video}" target="_blank" class="video-link">▶</a>` : '';
+        const videoHtml = ex.video ? `<a href="${ex.video}" target="_blank" class="video-link"><svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><polygon points="2,1 11,6 2,11"/></svg></a>` : '';
         const exKey = (ex.exercicio + '_' + tabId).replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 40);
         return `<div class="ex-card" data-ex="${exKey}" data-ex-label="${ex.exercicio}" data-series="${ex.series}">
           <div class="ex-row1">
