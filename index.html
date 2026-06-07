@@ -1068,6 +1068,13 @@
 </div>
 
 <div id="tab-extra" class="treino">
+  <div id="no-treinos-banner" style="display:none;background:var(--surface);border:1px solid var(--accent);border-radius:4px;padding:16px;margin-bottom:16px;text-align:center;">
+    <div style="font-size:24px;margin-bottom:8px;">🏋️</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--accent);margin-bottom:6px;">Nenhum treino importado</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Importe seu programa de treino para começar a treinar.</p>
+    <button onclick="openSettings()" style="background:transparent;border:1px solid var(--accent);color:var(--accent);font-family:'Bebas Neue',sans-serif;font-size:16px;padding:10px 24px;letter-spacing:1px;cursor:pointer;border-radius:4px;">IMPORTAR TREINO ⚙</button>
+  </div>
+
   <div class="treino-header">
     <div class="treino-title"><span>Atividade Livre</span>EXTRA</div>
     <div class="treino-meta">
@@ -1426,8 +1433,10 @@ document.addEventListener('DOMContentLoaded', () => {
   renderHistory();
   setupInputs();
   restoreImportedTabs();
+  restoreActiveWorkout();
   setupImportZone();
   renderOnboardingThemeGrid();
+  checkNoTreinosBanner();
   // Se já completou o onboarding, esconde a aba INÍCIO
   if (localStorage.getItem('onboarding_done')) {
     const welcomeBtn = document.getElementById('tab-btn-welcome');
@@ -1634,14 +1643,28 @@ function excluirTreino(nome) {
     localStorage.setItem('imported_tabs_data', JSON.stringify(importedTabsData));
 
     renderManageTreinos();
+    checkNoTreinosBanner();
     showToast(`"${nome}" excluído.`, 'var(--muted)');
 
-    // Se não há mais treinos importados, mostra welcome
-    const remaining = Object.keys(JSON.parse(localStorage.getItem('imported_tabs') || '{}')).length;
-    if (remaining === 0 || !document.querySelector('.treino.active')) {
+    // Verifica se ainda há aba ativa
+    if (!document.querySelector('.treino.active')) {
       document.querySelectorAll('.treino').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.getElementById('tab-welcome').classList.add('active');
+      // Tenta navegar pro primeiro treino importado restante
+      const nextImported = document.querySelector('.tabs [data-tabid]');
+      if (nextImported) {
+        const nextId = nextImported.getAttribute('data-tabid');
+        const nextTab = document.getElementById('tab-' + nextId);
+        if (nextTab) { nextTab.classList.add('active'); nextImported.classList.add('active'); }
+      } else {
+        // Vai pro EXTRA como fallback
+        const extraTab = document.getElementById('tab-extra');
+        const extraBtn = document.querySelector('[onclick*="extra"]');
+        if (extraTab) extraTab.classList.add('active');
+        if (extraBtn) extraBtn.classList.add('active');
+        // Mostra aviso de nenhum treino
+        showToast('Importe um treino pela engrenagem ⚙', 'var(--accent)');
+      }
     }
   });
 }
@@ -1651,6 +1674,7 @@ function renderImportPreview() {
   const preview = document.getElementById('import-preview' + sfx);
   const actionRow = document.getElementById('import-action-row' + sfx);
   const confirmBtn = document.getElementById('import-confirm-btn' + sfx);
+  if (!preview || !actionRow || !confirmBtn) return;
   const existingTabs = getAllExistingTabs();
 
   preview.style.display = 'block';
@@ -1761,9 +1785,12 @@ function confirmarImport() {
   }
 
   const sfxReset = activeImportContext === 'onboarding' ? '-ob' : '';
-  document.getElementById('import-preview' + sfxReset).style.display = 'none';
-  document.getElementById('import-action-row' + sfxReset).classList.remove('visible');
-  document.getElementById('import-confirm-btn' + sfxReset).disabled = true;
+  const previewEl = document.getElementById('import-preview' + sfxReset);
+  const actionRowEl = document.getElementById('import-action-row' + sfxReset);
+  const confirmBtnEl = document.getElementById('import-confirm-btn' + sfxReset);
+  if (previewEl) previewEl.style.display = 'none';
+  if (actionRowEl) actionRowEl.classList.remove('visible');
+  if (confirmBtnEl) confirmBtnEl.disabled = true;
   const csvInput = document.getElementById('csv-file-input' + sfxReset);
   if (csvInput) csvInput.value = '';
   parsedCsvTreinos = {};
@@ -1771,6 +1798,7 @@ function confirmarImport() {
     closeSettings();
   }
   renderManageTreinos();
+  checkNoTreinosBanner();
   showToast('Treino(s) importado(s) com sucesso! ✓');
 }
 
@@ -1882,6 +1910,50 @@ function setupSingleCard(card) {
   }
 }
 
+function restoreActiveWorkout() {
+  const saved = localStorage.getItem('active_workout');
+  if (!saved) return;
+  const { letter, startTime } = JSON.parse(saved);
+  const container = document.getElementById('tab-' + letter);
+  if (!container) return;
+
+  const btn = container.querySelector('.action-btn');
+  const gymPanel = container.querySelector('.gym-panel');
+  const cards = container.querySelectorAll('.ex-card');
+  const nameTreino = container.getAttribute('data-treino-name');
+
+  activeWorkoutLetter = letter;
+  btn.textContent = "CONCLUIR E SALVAR TREINO";
+  btn.classList.add('active-run');
+  gymPanel.style.display = 'block';
+  cards.forEach(c => c.classList.add('active-workout'));
+
+  // Restaura timer com tempo já decorrido
+  timerStart = startTime;
+  const display = document.getElementById('timer-display-' + letter);
+  const bar = document.getElementById('timer-' + letter);
+  if (bar) bar.classList.add('visible');
+  timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - timerStart) / 1000);
+    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    if (display) display.textContent = m + ':' + s;
+  }, 1000);
+
+  // Navega pra aba ativa
+  const tabBtn = document.querySelector(`.tab[onclick*="'${letter}'"]`) ||
+                 document.querySelector(`.tab[data-tabid="${letter}"]`);
+  if (tabBtn) showTab(letter, tabBtn);
+
+  applyLastSessionSuggestions(letter);
+}
+
+function checkNoTreinosBanner() {
+  const banner = document.getElementById('no-treinos-banner');
+  if (!banner) return;
+  const hasTreinos = Object.keys(JSON.parse(localStorage.getItem('imported_tabs') || '{}')).length > 0;
+  banner.style.display = hasTreinos ? 'none' : 'block';
+}
 function restoreImportedTabs() {
   const importedTabs = JSON.parse(localStorage.getItem('imported_tabs') || '{}');
   const savedData = JSON.parse(localStorage.getItem('imported_tabs_data') || '{}');
@@ -1997,6 +2069,11 @@ function toggleWorkout(letter) {
 
   if (activeWorkoutLetter === null) {
     activeWorkoutLetter = letter;
+    // Salva estado ativo no localStorage
+    localStorage.setItem('active_workout', JSON.stringify({
+      letter,
+      startTime: Date.now()
+    }));
     btn.textContent = "CONCLUIR E SALVAR TREINO";
     btn.classList.add('active-run');
     gymPanel.style.display = 'block';
@@ -2031,6 +2108,7 @@ function toggleWorkout(letter) {
     }
 
     activeWorkoutLetter = null;
+    localStorage.removeItem('active_workout');
     cancelRestTimer(true);
     btn.textContent = "Iniciar " + nameTreino;
     btn.classList.remove('active-run');
