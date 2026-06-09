@@ -1603,16 +1603,20 @@ function aplicarPerfil(p) {
   if (nome || sobrenome) {
     document.getElementById('header-name').innerHTML =
       `${nome.toUpperCase()} <span id="header-name-span">${sobrenome.toUpperCase()}</span>`;
+  } else {
+    document.getElementById('header-name').innerHTML =
+      `MEU <span id="header-name-span">TREINO</span>`;
   }
   if (p.subtitulo !== undefined) {
-    document.getElementById('header-subtitle').textContent = p.subtitulo;
+    const subtEl = document.getElementById('header-subtitle');
+    if (subtEl) subtEl.textContent = p.subtitulo || 'Configure seu perfil na engrenagem ⚙';
   }
   const alertBox = document.getElementById('alert-box');
   if (alertBox) {
     if (p.aviso === undefined) return;
     if (p.aviso) {
       alertBox.style.display = 'block';
-      alertBox.innerHTML = `<strong>⚠</strong> ${p.aviso}`;
+      alertBox.innerHTML = '<strong>⚠</strong> ' + p.aviso;
     } else {
       alertBox.style.display = 'none';
     }
@@ -1816,6 +1820,14 @@ document.addEventListener('DOMContentLoaded', () => {
   setupImportZone();
   renderOnboardingThemeGrid();
   checkNoTreinosBanner();
+  // Pré-preenche campos do onboarding com perfil salvo
+  const savedP = JSON.parse(localStorage.getItem('app_profile') || '{}');
+  if (document.getElementById('ob-nome')) {
+    document.getElementById('ob-nome').value = savedP.nome || '';
+    document.getElementById('ob-sobrenome').value = savedP.sobrenome || '';
+    document.getElementById('ob-subtitulo').value = savedP.subtitulo || '';
+    document.getElementById('ob-aviso').value = savedP.aviso || '';
+  }
   // Se já completou o onboarding, esconde a aba INÍCIO
   if (localStorage.getItem('onboarding_done')) {
     const welcomeBtn = document.getElementById('tab-btn-welcome');
@@ -2205,7 +2217,6 @@ function salvarOnboarding() {
   localStorage.setItem('app_profile', JSON.stringify(perfil));
   localStorage.setItem('onboarding_done', '1');
   aplicarPerfil(perfil);
-
   const hasTreinos = Object.keys(JSON.parse(localStorage.getItem('imported_tabs') || '{}')).length > 0;
   if (hasTreinos) {
     hideWelcomeTab();
@@ -2259,19 +2270,22 @@ function buildTreinoTabHtml(tabId, nome, exs) {
       <div class="treino-title"><span>Importado via CSV</span>${nome.toUpperCase()}</div>
       <div class="treino-meta"><div class="badge badge-yellow">CSV</div></div>
     </div>
+    <div class="gym-panel">
+      <label class="gym-label">📍 Onde você está treinando hoje? (opcional)</label>
+      <input type="text" class="gym-input" placeholder="Ex: Smart Fit Centro...">
+    </div>
     <button class="action-btn" onclick="toggleWorkout('${tabId}')">Iniciar ${nome}</button>
     <div class="timer-bar" id="timer-${tabId}">
       <div><div class="timer-label">⏱ Em andamento</div></div>
       <div class="timer-display" id="timer-display-${tabId}">00:00</div>
     </div>
-    <div class="gym-panel">
-      <label class="gym-label">📍 Onde você está treinando hoje? (opcional)</label>
-      <input type="text" class="gym-input" placeholder="Ex: Smart Fit Centro...">
-      <label class="gym-label" style="margin-top:10px;">💬 Como foi o treino? (opcional)</label>
-      <textarea class="gym-input session-comment" rows="2" placeholder="Ex: Senti dor no joelho esquerdo, disposição boa, aumentei carga no supino..."></textarea>
-    </div>
     ${sectionsHtml}
     <button class="add-ex-btn" id="add-ex-btn-${tabId}" onclick="openAddEx('${tabId}')">+ Adicionar Exercício</button>
+    <div class="session-comment-panel" style="display:none;">
+      <label class="gym-label">💬 Como foi o treino? (opcional)</label>
+      <textarea class="gym-input session-comment" rows="2" placeholder="Ex: Senti dor no joelho esquerdo, disposição boa, aumentei carga no supino..."></textarea>
+    </div>
+    <button class="action-btn" id="conclude-btn-${tabId}" onclick="toggleWorkout('${tabId}')" style="display:none;">CONCLUIR E SALVAR TREINO</button>
   </div>`;
 }
 
@@ -2320,10 +2334,26 @@ function buildInputRow(exName, i, numSeries, metrica) {
     const savedKm = savedData.km || '';
     const savedKcal = savedData.kcal || '';
 
+    let kmInput = null, kcalInput = null;
+
+    const saveTime = function() {
+      const m = parseInt(minInput.value) || 0;
+      const s = Math.min(parseInt(secInput.value) || 0, 59);
+      const data = { val: String(m * 60 + s) };
+      if (metrica === 'cardio') {
+        data.km = kmInput ? kmInput.value : '';
+        data.kcal = kcalInput ? kcalInput.value : '';
+      }
+      localStorage.setItem('weight2_' + exName + '_s' + i, JSON.stringify(data));
+      localStorage.setItem('weight_' + exName + '_s' + i, data.val);
+    };
+
     const minInput = document.createElement('input');
     minInput.type = 'number'; minInput.min = '0'; minInput.step = '1';
     minInput.className = 'input-carga'; minInput.style.width = '52px';
     minInput.placeholder = '0'; if (savedMin) minInput.value = savedMin;
+    minInput.addEventListener('input', saveTime);
+    minInput.addEventListener('blur', function() { if (activeWorkoutLetter) startRestTimer(); });
 
     const minLbl = document.createElement('span');
     minLbl.className = 'input-kg-label'; minLbl.textContent = 'min';
@@ -2332,35 +2362,28 @@ function buildInputRow(exName, i, numSeries, metrica) {
     secInput.type = 'number'; secInput.min = '0'; secInput.max = '59'; secInput.step = '1';
     secInput.className = 'input-carga'; secInput.style.width = '52px';
     secInput.placeholder = '00'; if (savedSec) secInput.value = savedSec;
+    secInput.addEventListener('input', saveTime);
+    secInput.addEventListener('blur', function() { if (activeWorkoutLetter) startRestTimer(); });
 
     const secLbl = document.createElement('span');
     secLbl.className = 'input-kg-label'; secLbl.textContent = 'seg';
-
-    const saveTime = function() {
-      const m = parseInt(minInput.value) || 0;
-      const s = Math.min(parseInt(secInput.value) || 0, 59);
-      const total = String(m * 60 + s);
-      const data = { val: total };
-      if (metrica === 'cardio') {
-        data.km = kmInput ? kmInput.value : '';
-        data.kcal = kcalInput ? kcalInput.value : '';
-      }
-      localStorage.setItem('weight2_' + exName + '_s' + i, JSON.stringify(data));
-      localStorage.setItem('weight_' + exName + '_s' + i, total);
-    };
-
-    minInput.addEventListener('input', saveTime);
-    secInput.addEventListener('input', saveTime);
-    minInput.addEventListener('blur', function() { if (activeWorkoutLetter) startRestTimer(); });
-    secInput.addEventListener('blur', function() { if (activeWorkoutLetter) startRestTimer(); });
 
     wrapper.appendChild(minInput);
     wrapper.appendChild(minLbl);
     wrapper.appendChild(secInput);
     wrapper.appendChild(secLbl);
+    wrapper.appendChild(skipBtn);
 
-    let kmInput = null, kcalInput = null;
     if (metrica === 'cardio') {
+      // Agrupa as duas linhas num container vertical
+      const inputsCol = document.createElement('div');
+      inputsCol.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:1;';
+
+      inputsCol.appendChild(wrapper);
+
+      const row2 = document.createElement('div');
+      row2.style.cssText = 'display:flex;align-items:center;gap:6px;';
+
       const kmI = document.createElement('input');
       kmI.type = 'text'; kmI.inputMode = 'decimal';
       kmI.className = 'input-carga'; kmI.style.width = '52px';
@@ -2370,7 +2393,7 @@ function buildInputRow(exName, i, numSeries, metrica) {
 
       const kcalI = document.createElement('input');
       kcalI.type = 'number'; kcalI.min = '0'; kcalI.step = '1';
-      kcalI.className = 'input-carga'; kcalI.style.width = '56px';
+      kcalI.className = 'input-carga'; kcalI.style.width = '64px';
       kcalI.placeholder = '0'; kcalI.value = savedKcal;
       const kcalL = document.createElement('span');
       kcalL.className = 'input-kg-label'; kcalL.textContent = 'kcal';
@@ -2378,31 +2401,27 @@ function buildInputRow(exName, i, numSeries, metrica) {
       kmI.addEventListener('input', saveTime);
       kcalI.addEventListener('input', saveTime);
 
-      wrapper.appendChild(kmI);
-      wrapper.appendChild(kmL);
-      wrapper.appendChild(kcalI);
-      wrapper.appendChild(kcalL);
+      row2.appendChild(kmI);
+      row2.appendChild(kmL);
+      row2.appendChild(kcalI);
+      row2.appendChild(kcalL);
+      inputsCol.appendChild(row2);
+      row.appendChild(inputsCol);
 
       kmInput = kmI; kcalInput = kcalI;
+    } else {
+      row.appendChild(wrapper);
     }
-
-    wrapper.appendChild(skipBtn);
   } else {
     const input = document.createElement('input');
     input.className = 'input-carga';
     input.placeholder = ' ';
     input.value = val;
+    input.type = 'number';
+    input.step = metrica === 'reps' ? '1' : '0.5';
     input.min = '0';
-
-    if (metrica === 'reps') {
-      input.type = 'number';
-      input.step = '1';
-      input.max = '9999';
-    } else {
-      // type=text + inputmode=decimal aceita vírgula no iOS e ponto no Android
-      input.type = 'text';
-      input.inputMode = 'decimal';
-    }
+    if (metrica === 'reps') { input.type = 'number'; }
+    else { input.type = 'text'; input.inputMode = 'decimal'; }
 
     input.addEventListener('input', function() { handleInputChange2(exName, i, this, numSeries); });
     input.addEventListener('keydown', function(e) { handleInputKeydown(exName, i, this, numSeries, e); });
@@ -2415,9 +2434,9 @@ function buildInputRow(exName, i, numSeries, metrica) {
     wrapper.appendChild(input);
     wrapper.appendChild(unitLbl);
     wrapper.appendChild(skipBtn);
+    row.appendChild(wrapper);
   }
 
-  row.appendChild(wrapper);
   return row;
 }
 
@@ -2500,9 +2519,11 @@ function restoreActiveWorkout() {
   const nameTreino = container.getAttribute('data-treino-name');
 
   activeWorkoutLetter = letter;
-  btn.textContent = "CONCLUIR E SALVAR TREINO";
-  btn.classList.add('active-run');
-  gymPanel.style.display = 'block';
+  btn.style.display = 'none';
+  const concludeBtn = container.querySelector('#conclude-btn-' + letter);
+  if (concludeBtn) { concludeBtn.style.display = 'block'; concludeBtn.classList.add('active-run'); }
+  const commentPanel = container.querySelector('.session-comment-panel');
+  if (commentPanel) commentPanel.style.display = 'block';
   cards.forEach(c => c.classList.add('active-workout'));
 
   // Restaura timer com tempo já decorrido
@@ -2856,14 +2877,13 @@ function toggleWorkout(letter) {
 
   if (activeWorkoutLetter === null) {
     activeWorkoutLetter = letter;
-    // Salva estado ativo no localStorage
-    localStorage.setItem('active_workout', JSON.stringify({
-      letter,
-      startTime: Date.now()
-    }));
-    btn.textContent = "CONCLUIR E SALVAR TREINO";
-    btn.classList.add('active-run');
-    gymPanel.style.display = 'block';
+    localStorage.setItem('active_workout', JSON.stringify({ letter, startTime: Date.now() }));
+    // Esconde botão de iniciar, mostra botão de concluir embaixo
+    btn.style.display = 'none';
+    const concludeBtn = container.querySelector('#conclude-btn-' + letter) || container.querySelector('.action-btn:last-of-type');
+    if (concludeBtn) { concludeBtn.style.display = 'block'; concludeBtn.classList.add('active-run'); }
+    const commentPanel = container.querySelector('.session-comment-panel');
+    if (commentPanel) commentPanel.style.display = 'block';
     gymInput.value = '';
     cards.forEach(c => c.classList.add('active-workout'));
     startTimer(letter);
@@ -2894,9 +2914,10 @@ function toggleWorkout(letter) {
               const total = m * 60 + s;
               const fmt = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
               let entry = total > 0 ? fmt + 'min' : 'Completo';
-              if (metrica === 'cardio' && inputs.length >= 4) {
-                const km = inputs[2].value.replace(',','.');
-                const kcal = inputs[3].value;
+              if (metrica === 'cardio') {
+                const row2inputs = row.querySelectorAll('div > .input-carga');
+                const km = row2inputs[0] ? row2inputs[0].value.replace(',','.') : '';
+                const kcal = row2inputs[1] ? row2inputs[1].value : '';
                 if (km) entry += ' · ' + km + 'km';
                 if (kcal) entry += ' · ' + kcal + 'kcal';
               }
@@ -2930,22 +2951,26 @@ function toggleWorkout(letter) {
     cancelRestTimer(true);
     const addExBtn2 = container.querySelector('.add-ex-btn');
     if (addExBtn2) addExBtn2.classList.remove('visible');
-    // Remove cards extras — são apenas da sessão
     container.querySelectorAll('.ex-card[data-extra="true"]').forEach(c => c.remove());
-    btn.textContent = "Iniciar " + nameTreino;
-    btn.classList.remove('active-run');
-    gymPanel.style.display = 'none';
+    // Restaura botão de iniciar, esconde botão de concluir
+    btn.style.display = 'block';
+    const concludeBtn2 = container.querySelector('[id^="conclude-btn-"]');
+    if (concludeBtn2) { concludeBtn2.style.display = 'none'; concludeBtn2.classList.remove('active-run'); }
+    const commentPanel2 = container.querySelector('.session-comment-panel');
+    if (commentPanel2) commentPanel2.style.display = 'none';
     if (sessionComment) sessionComment.value = '';
     cards.forEach(c => {
       c.classList.remove('active-workout');
       c.querySelectorAll('.inputs-row').forEach(row => {
         row.classList.remove('skipped');
         const input = row.querySelector('.input-carga');
-        input.disabled = false;
+        if (input) input.disabled = false;
         const sBtn = row.querySelector('.skip-btn');
-        sBtn.textContent = "❌";
-        sBtn.style.borderColor = "var(--border)";
-        sBtn.style.color = "var(--muted)";
+        if (sBtn) {
+          sBtn.textContent = "❌";
+          sBtn.style.borderColor = "var(--border)";
+          sBtn.style.color = "var(--muted)";
+        }
       });
     });
 
