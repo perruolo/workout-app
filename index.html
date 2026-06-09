@@ -225,6 +225,26 @@
     border-radius: var(--radius);
   }
   .gym-input:focus { outline: none; border-color: var(--accent); }
+  .session-comment { resize: none; min-height: 56px; }
+
+  /* Modal de exercício extra */
+  .add-ex-btn {
+    display: none;
+    width: 100%;
+    background: var(--accent-op);
+    border: 1px dashed var(--accent);
+    color: var(--accent);
+    font-family: var(--font-display);
+    font-size: 18px;
+    letter-spacing: 1px;
+    padding: 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: all 0.2s;
+  }
+  .add-ex-btn:active { background: var(--accent); color: #000; }
+  .add-ex-btn.visible { display: block; }
 
   .section-label {
     font-size: 11px;
@@ -1147,7 +1167,7 @@
       <div class="import-info-box">
         Um único arquivo CSV com todos os seus treinos — a coluna <code>Treino</code> separa as sessões. Todas as linhas com <code>Fullbody 1</code> viram uma aba, todas com <code>Fullbody 2</code> viram outra, e assim por diante. Sem limite de sessões.<br><br>
         <strong style="color:var(--text)">Secao</strong>: agrupa exercícios dentro da sessão. Ex: <code>Membros Superiores</code> e <code>Membros Inferiores &amp; Cardio</code>.<br>
-        <strong style="color:var(--text)">Metrica</strong>: <code>peso</code> (kg, padrão) · <code>reps</code> (repetições) · <code>tempo</code> (minutos).<br>
+        <strong style="color:var(--text)">Metrica</strong>: <code>peso</code> (kg, padrão) · <code>reps</code> (repetições) · <code>tempo</code> (min/seg, ex: prancha) · <code>cardio</code> (min/seg + km + kcal, ex: esteira).<br>
         <strong style="color:var(--text)">Flag</strong>: <code>joelho</code> (badge vermelho) · <code>tip</code> (badge amarelo) · ou vazio.<br>
         <strong style="color:var(--text)">Video</strong>: URL completa ou vazio.<br><br>
         <strong style="color:var(--accent)">⚠ Acentos e caracteres especiais:</strong> edite o CSV pelo <strong style="color:var(--text)">Google Sheets</strong> e baixe via <em>Arquivo → Fazer download → CSV</em>. Isso garante que ã, é, í e outros caracteres apareçam corretamente no app.
@@ -1191,6 +1211,44 @@
     <button class="tab active" id="tab-btn-welcome" onclick="showTab('welcome', this)">INÍCIO</button>
     <button class="tab" onclick="showTab('extra', this)" style="border-color: var(--accent2); color: var(--accent2)">EXTRA</button>
     <button class="tab" onclick="showTab('hist', this)" style="border-color: var(--safe); color: var(--safe)">HISTÓRICO</button>
+  </div>
+</div>
+
+<!-- Modal Exercício Extra -->
+<div class="settings-overlay" id="add-ex-overlay">
+  <div class="settings-backdrop" onclick="closeAddEx()"></div>
+  <div class="settings-panel">
+    <div class="settings-top">
+      <div class="settings-title">+ EXERCÍCIO EXTRA</div>
+      <button class="settings-close" onclick="closeAddEx()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 16px;">Fez algo além do treino hoje? Cardio, abdominal, alongamento — anote aqui e entra no histórico da sessão.</p>
+    <div class="sfield">
+      <label>Nome do Exercício</label>
+      <input type="text" id="addex-nome" class="extra-input" placeholder="Ex: Esteira, Abdominal, Flexão...">
+    </div>
+    <div class="sfield">
+      <label>Métrica</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <label class="import-radio-label checked" onclick="selectAddExMetrica(this)" id="addex-m-peso">
+          <input type="radio" name="addex-metrica" value="peso" checked> ⚖️ Peso (kg)
+        </label>
+        <label class="import-radio-label" onclick="selectAddExMetrica(this)" id="addex-m-reps">
+          <input type="radio" name="addex-metrica" value="reps"> 🔢 Repetições
+        </label>
+        <label class="import-radio-label" onclick="selectAddExMetrica(this)" id="addex-m-tempo">
+          <input type="radio" name="addex-metrica" value="tempo"> ⏱ Tempo
+        </label>
+        <label class="import-radio-label" onclick="selectAddExMetrica(this)" id="addex-m-cardio">
+          <input type="radio" name="addex-metrica" value="cardio"> 🏃 Cardio
+        </label>
+      </div>
+    </div>
+    <div class="sfield">
+      <label>Número de Séries</label>
+      <input type="number" id="addex-series" class="extra-input" value="3" min="1" max="10" step="1">
+    </div>
+    <button class="s-save-btn" onclick="confirmarAddEx()">ADICIONAR AO TREINO</button>
   </div>
 </div>
 
@@ -1907,7 +1965,7 @@ function parseCsv(text) {
     let metrica = 'peso';
     for (let ci = cols.length - 1; ci >= 8; ci--) {
       const v = (cols[ci] || '').toLowerCase().trim();
-      if (v === 'peso' || v === 'reps' || v === 'tempo') { metrica = v; break; }
+      if (v === 'peso' || v === 'reps' || v === 'tempo' || v === 'cardio') { metrica = v; break; }
     }
     if (!metrica) metrica = (cols[8] || 'peso').toLowerCase().trim();
     if (!treino || !exercicio) return;
@@ -2207,10 +2265,13 @@ function buildTreinoTabHtml(tabId, nome, exs) {
       <div class="timer-display" id="timer-display-${tabId}">00:00</div>
     </div>
     <div class="gym-panel">
-      <label class="gym-label">📍 Onde você está treinando hoje?</label>
+      <label class="gym-label">📍 Onde você está treinando hoje? (opcional)</label>
       <input type="text" class="gym-input" placeholder="Ex: Smart Fit Centro...">
+      <label class="gym-label" style="margin-top:10px;">💬 Como foi o treino? (opcional)</label>
+      <textarea class="gym-input session-comment" rows="2" placeholder="Ex: Senti dor no joelho esquerdo, disposição boa, aumentei carga no supino..."></textarea>
     </div>
     ${sectionsHtml}
+    <button class="add-ex-btn" id="add-ex-btn-${tabId}" onclick="openAddEx('${tabId}')">+ Adicionar Exercício</button>
   </div>`;
 }
 
@@ -2229,7 +2290,6 @@ function getMetrica(card) {
   const label = card.getAttribute('data-ex-label') || card.getAttribute('data-ex') || '';
   return inferMetrica(label);
 }
-
 function buildInputRow(exName, i, numSeries, metrica) {
   const saved = JSON.parse(localStorage.getItem('weight2_' + exName + '_s' + i) || 'null');
   const val = saved ? saved.val : (localStorage.getItem('weight_' + exName + '_s' + i) || '');
@@ -2252,10 +2312,13 @@ function buildInputRow(exName, i, numSeries, metrica) {
   skipBtn.textContent = '❌';
   skipBtn.onclick = function() { toggleSkip(this); };
 
-  if (metrica === 'tempo') {
-    const totalSecs = parseInt(val) || 0;
+  if (metrica === 'tempo' || metrica === 'cardio') {
+    const savedData = JSON.parse(localStorage.getItem('weight2_' + exName + '_s' + i) || 'null') || {};
+    const totalSecs = parseInt(savedData.val || val) || 0;
     const savedMin = Math.floor(totalSecs / 60);
     const savedSec = totalSecs % 60;
+    const savedKm = savedData.km || '';
+    const savedKcal = savedData.kcal || '';
 
     const minInput = document.createElement('input');
     minInput.type = 'number'; minInput.min = '0'; minInput.step = '1';
@@ -2277,9 +2340,15 @@ function buildInputRow(exName, i, numSeries, metrica) {
       const m = parseInt(minInput.value) || 0;
       const s = Math.min(parseInt(secInput.value) || 0, 59);
       const total = String(m * 60 + s);
-      localStorage.setItem('weight2_' + exName + '_s' + i, JSON.stringify({ val: total }));
+      const data = { val: total };
+      if (metrica === 'cardio') {
+        data.km = kmInput ? kmInput.value : '';
+        data.kcal = kcalInput ? kcalInput.value : '';
+      }
+      localStorage.setItem('weight2_' + exName + '_s' + i, JSON.stringify(data));
       localStorage.setItem('weight_' + exName + '_s' + i, total);
     };
+
     minInput.addEventListener('input', saveTime);
     secInput.addEventListener('input', saveTime);
     minInput.addEventListener('blur', function() { if (activeWorkoutLetter) startRestTimer(); });
@@ -2289,16 +2358,51 @@ function buildInputRow(exName, i, numSeries, metrica) {
     wrapper.appendChild(minLbl);
     wrapper.appendChild(secInput);
     wrapper.appendChild(secLbl);
+
+    let kmInput = null, kcalInput = null;
+    if (metrica === 'cardio') {
+      const kmI = document.createElement('input');
+      kmI.type = 'text'; kmI.inputMode = 'decimal';
+      kmI.className = 'input-carga'; kmI.style.width = '52px';
+      kmI.placeholder = '0'; kmI.value = savedKm;
+      const kmL = document.createElement('span');
+      kmL.className = 'input-kg-label'; kmL.textContent = 'km';
+
+      const kcalI = document.createElement('input');
+      kcalI.type = 'number'; kcalI.min = '0'; kcalI.step = '1';
+      kcalI.className = 'input-carga'; kcalI.style.width = '56px';
+      kcalI.placeholder = '0'; kcalI.value = savedKcal;
+      const kcalL = document.createElement('span');
+      kcalL.className = 'input-kg-label'; kcalL.textContent = 'kcal';
+
+      kmI.addEventListener('input', saveTime);
+      kcalI.addEventListener('input', saveTime);
+
+      wrapper.appendChild(kmI);
+      wrapper.appendChild(kmL);
+      wrapper.appendChild(kcalI);
+      wrapper.appendChild(kcalL);
+
+      kmInput = kmI; kcalInput = kcalI;
+    }
+
     wrapper.appendChild(skipBtn);
   } else {
     const input = document.createElement('input');
-    input.type = 'number';
     input.className = 'input-carga';
     input.placeholder = ' ';
     input.value = val;
-    input.step = metrica === 'reps' ? '1' : '0.5';
     input.min = '0';
-    if (metrica === 'reps') input.max = '9999';
+
+    if (metrica === 'reps') {
+      input.type = 'number';
+      input.step = '1';
+      input.max = '9999';
+    } else {
+      // type=text + inputmode=decimal aceita vírgula no iOS e ponto no Android
+      input.type = 'text';
+      input.inputMode = 'decimal';
+    }
 
     input.addEventListener('input', function() { handleInputChange2(exName, i, this, numSeries); });
     input.addEventListener('keydown', function(e) { handleInputKeydown(exName, i, this, numSeries, e); });
@@ -2318,9 +2422,10 @@ function buildInputRow(exName, i, numSeries, metrica) {
 }
 
 function handleInputChange2(ex, currentSerie, inputEl, totalSeries) {
-  const val = inputEl.value;
-  localStorage.setItem(`weight2_${ex}_s${currentSerie}`, JSON.stringify({ val }));
-  localStorage.setItem(`weight_${ex}_s${currentSerie}`, val);
+  const raw = inputEl.value;
+  const val = raw.replace(',', '.');
+  localStorage.setItem('weight2_' + ex + '_s' + currentSerie, JSON.stringify({ val }));
+  localStorage.setItem('weight_' + ex + '_s' + currentSerie, val);
 
   // Propaga pras séries seguintes que estão vazias ou com o mesmo valor anterior
   const panel = inputEl.closest('.tracker-panel');
@@ -2418,6 +2523,8 @@ function restoreActiveWorkout() {
   if (tabBtn) showTab(letter, tabBtn);
 
   applyLastSessionSuggestions(letter);
+  const addExBtn = container.querySelector('.add-ex-btn');
+  if (addExBtn) addExBtn.classList.add('visible');
 }
 
 function checkNoTreinosBanner() {
@@ -2493,9 +2600,12 @@ function parseHistoryForEx(exName) {
     lines.forEach(line => {
       const matchName = line.match(/^•\s+(.+?)\s+->/);
       if (!matchName) return;
-      const lineName = matchName[1].trim().toLowerCase();
-      if (!lineName.includes(exName.toLowerCase().slice(0,8)) &&
-          !exName.toLowerCase().includes(lineName.slice(0,8))) return;
+      const lineName = matchName[1].trim().toLowerCase().replace(' [extra]', '');
+      const searchName = exName.toLowerCase();
+      // Match mais preciso: usa os primeiros 12 chars ou o nome completo se menor
+      const prefix = Math.min(12, searchName.length);
+      if (!lineName.includes(searchName.slice(0, prefix)) &&
+          !searchName.includes(lineName.slice(0, prefix))) return;
 
       // Detecta unidade: kg, reps ou min/tempo (em segundos)
       let values = [];
@@ -2509,6 +2619,11 @@ function parseHistoryForEx(exName) {
       if (kgMatches.length > 0) { values = kgMatches; unit = 'kg'; }
       else if (repsMatches.length > 0) { values = repsMatches; unit = 'reps'; }
       else if (minMatches.length > 0) { values = minMatches; unit = 'seg'; }
+      // Also match MM:SSmin·Xkm·Xkcal format from cardio
+      if (values.length === 0) {
+        const cardioTime = [...line.matchAll(/(\d{1,2}):(\d{2})min/g)].map(m => parseInt(m[1])*60+parseInt(m[2]));
+        if (cardioTime.length > 0) { values = cardioTime; unit = 'seg'; }
+      }
 
       if (values.length === 0) return;
 
@@ -2552,65 +2667,21 @@ function renderChart() {
   const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
   const surface2 = getComputedStyle(document.documentElement).getPropertyValue('--surface2').trim();
   const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+  const unitLabel = unit === 'seg' ? 'min' : unit;
 
-  chartInstance = new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data: values,
-        borderColor: accent,
-        backgroundColor: accent + '22',
-        pointBackgroundColor: accent,
-        pointRadius: 5,
-        pointHoverRadius: 7,
-        tension: 0.3,
-        fill: true,
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => ctx.parsed.y + unit
-          }
-        }
-      },
-      scales: {
-        x: {
-          ticks: { color: muted, font: { size: 10 }, maxRotation: 30 },
-          grid: { color: surface2 }
-        },
-        y: {
-          ticks: { color: muted, callback: v => v + unit },
-          grid: { color: surface2 }
-        }
-      }
-    }
-  });
-
-  // Stats
-  const fmt = v => {
+  const fmt = function(v) {
     if (unit === 'seg') {
-      const m = Math.floor(v / 60);
-      const s = Math.round(v % 60);
+      var m = Math.floor(v / 60);
+      var s = Math.round(v % 60);
       return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
     }
     return unit === 'kg' ? v : Math.round(v);
   };
-  const unitLabel = unit === 'seg' ? 'min' : unit;
-  const max = Math.max(...values);
-  const last = values[values.length - 1];
-  const first = values[0];
-  const gain = last - first;
-  const gainStr = (gain >= 0 ? '+' : '') + fmt(gain) + unitLabel;
 
   chartInstance = new Chart(canvas, {
     type: 'line',
     data: {
-      labels,
+      labels: labels,
       datasets: [{
         data: values,
         borderColor: accent,
@@ -2626,38 +2697,83 @@ function renderChart() {
       responsive: true,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => fmt(ctx.parsed.y) + unitLabel
-          }
-        }
+        tooltip: { callbacks: { label: function(ctx) { return fmt(ctx.parsed.y) + unitLabel; } } }
       },
       scales: {
-        x: {
-          ticks: { color: muted, font: { size: 10 }, maxRotation: 30 },
-          grid: { color: surface2 }
-        },
-        y: {
-          ticks: { color: muted, callback: v => fmt(v) + unitLabel },
-          grid: { color: surface2 }
-        }
+        x: { ticks: { color: muted, font: { size: 10 }, maxRotation: 30 }, grid: { color: surface2 } },
+        y: { ticks: { color: muted, callback: function(v) { return fmt(v) + unitLabel; } }, grid: { color: surface2 } }
       }
     }
   });
 
-  stats.innerHTML = `
-    <div class="chart-stat">
-      <div class="chart-stat-val">${fmt(max)}${unitLabel}</div>
-      <div class="chart-stat-lbl">🏆 Recorde</div>
+  var max = Math.max.apply(null, values);
+  var last = values[values.length - 1];
+  var first = values[0];
+  var gain = last - first;
+  var gainStr = (gain >= 0 ? '+' : '') + fmt(gain) + unitLabel;
+
+  stats.innerHTML = '<div class="chart-stat"><div class="chart-stat-val">' + fmt(max) + unitLabel + '</div><div class="chart-stat-lbl">🏆 Recorde</div></div>' +
+    '<div class="chart-stat"><div class="chart-stat-val">' + fmt(last) + unitLabel + '</div><div class="chart-stat-lbl">📍 Último</div></div>' +
+    '<div class="chart-stat"><div class="chart-stat-val" style="color:' + (gain >= 0 ? 'var(--safe)' : 'var(--danger)') + '">' + gainStr + '</div><div class="chart-stat-lbl">📈 Evolução</div></div>';
+}
+
+// -- EXERCÍCIO EXTRA DURANTE TREINO --
+let addExTargetTab = null;
+
+function openAddEx(tabId) {
+  addExTargetTab = tabId;
+  document.getElementById('add-ex-overlay').classList.add('open');
+  document.getElementById('addex-nome').value = '';
+  document.getElementById('addex-series').value = '3';
+  document.querySelectorAll('[id^="addex-m-"]').forEach(l => l.classList.remove('checked'));
+  document.getElementById('addex-m-peso').classList.add('checked');
+}
+
+function closeAddEx() {
+  document.getElementById('add-ex-overlay').classList.remove('open');
+  addExTargetTab = null;
+}
+
+function selectAddExMetrica(label) {
+  document.querySelectorAll('[id^="addex-m-"]').forEach(l => l.classList.remove('checked'));
+  label.classList.add('checked');
+}
+
+function confirmarAddEx() {
+  const nome = document.getElementById('addex-nome').value.trim();
+  if (!nome) { showToast('Digite o nome do exercício.', 'var(--danger)'); return; }
+  const metricaEl = document.querySelector('[id^="addex-m-"].checked input');
+  const metrica = metricaEl ? metricaEl.value : 'peso';
+  const series = Math.max(1, Math.min(10, parseInt(document.getElementById('addex-series').value) || 3));
+
+  const container = document.getElementById('tab-' + addExTargetTab);
+  if (!container) { closeAddEx(); return; }
+
+  // Cria ex-card extra
+  const exKey = ('extra_' + nome + '_' + Date.now()).replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 40);
+  const card = document.createElement('div');
+  card.className = 'ex-card active-workout';
+  card.setAttribute('data-ex', exKey);
+  card.setAttribute('data-ex-label', nome + ' [extra]');
+  card.setAttribute('data-series', series);
+  card.setAttribute('data-metrica', metrica);
+  card.setAttribute('data-extra', 'true');
+
+  card.innerHTML = `
+    <div class="ex-row1">
+      <div class="ex-name">${nome} <span style="font-size:10px;color:var(--accent2);font-weight:700;">EXTRA</span></div>
+      <div class="series-reps">${series} × ${metrica === 'peso' ? 'kg' : metrica === 'reps' ? 'reps' : 'tempo'}</div>
     </div>
-    <div class="chart-stat">
-      <div class="chart-stat-val">${fmt(last)}${unitLabel}</div>
-      <div class="chart-stat-lbl">📍 Último</div>
-    </div>
-    <div class="chart-stat">
-      <div class="chart-stat-val" style="color:${gain >= 0 ? 'var(--safe)' : 'var(--danger)'}">${gainStr}</div>
-      <div class="chart-stat-lbl">📈 Evolução</div>
-    </div>`;
+    <div class="tracker-panel"></div>`;
+
+  setupSingleCard(card);
+
+  // Insere antes do botão add-ex
+  const addBtn = container.querySelector('.add-ex-btn');
+  container.insertBefore(card, addBtn);
+
+  closeAddEx();
+  showToast(nome + ' adicionado! ✓');
 }
 
 function showTab(name, btn) {
@@ -2752,10 +2868,14 @@ function toggleWorkout(letter) {
     cards.forEach(c => c.classList.add('active-workout'));
     startTimer(letter);
     applyLastSessionSuggestions(letter);
+    const addExBtn = container.querySelector('.add-ex-btn');
+    if (addExBtn) addExBtn.classList.add('visible');
   } else if (activeWorkoutLetter === letter) {
     const duracao = stopTimer(letter);
     let reportData = [];
     const localAcademia = gymInput.value.trim() || 'Academia';
+    const sessionComment = container.querySelector('.session-comment');
+    const commentGeral = sessionComment ? sessionComment.value.trim() : '';
     
     const perSide = false;
     cards.forEach(c => {
@@ -2766,14 +2886,21 @@ function toggleWorkout(letter) {
       let seriesReport = [];
       rows.forEach((row, idx) => {
         if (!row.classList.contains('skipped')) {
-          if (metrica === 'tempo') {
+          if (metrica === 'tempo' || metrica === 'cardio') {
             const inputs = row.querySelectorAll('.input-carga');
             if (inputs.length >= 2) {
               const m = parseInt(inputs[0].value) || 0;
               const s = Math.min(parseInt(inputs[1].value) || 0, 59);
               const total = m * 60 + s;
               const fmt = String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
-              seriesReport.push('S' + (idx+1) + ': ' + (total > 0 ? fmt + 'min' : 'Completo'));
+              let entry = total > 0 ? fmt + 'min' : 'Completo';
+              if (metrica === 'cardio' && inputs.length >= 4) {
+                const km = inputs[2].value.replace(',','.');
+                const kcal = inputs[3].value;
+                if (km) entry += ' · ' + km + 'km';
+                if (kcal) entry += ' · ' + kcal + 'kcal';
+              }
+              seriesReport.push('S' + (idx+1) + ': ' + entry);
             }
           } else {
             const input = row.querySelector('.input-carga');
@@ -2794,15 +2921,21 @@ function toggleWorkout(letter) {
     if (reportData.length > 0) {
       let details = reportData.join('\n');
       details += `\n⏱ Duração total: ${duracao}`;
+      if (commentGeral) details += '\n💬 ' + commentGeral;
       saveHistoryItem(nameTreino, localAcademia, details);
     }
 
     activeWorkoutLetter = null;
     localStorage.removeItem('active_workout');
     cancelRestTimer(true);
+    const addExBtn2 = container.querySelector('.add-ex-btn');
+    if (addExBtn2) addExBtn2.classList.remove('visible');
+    // Remove cards extras — são apenas da sessão
+    container.querySelectorAll('.ex-card[data-extra="true"]').forEach(c => c.remove());
     btn.textContent = "Iniciar " + nameTreino;
     btn.classList.remove('active-run');
     gymPanel.style.display = 'none';
+    if (sessionComment) sessionComment.value = '';
     cards.forEach(c => {
       c.classList.remove('active-workout');
       c.querySelectorAll('.inputs-row').forEach(row => {
