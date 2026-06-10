@@ -227,7 +227,133 @@
   .gym-input:focus { outline: none; border-color: var(--accent); }
   .session-comment { resize: none; min-height: 56px; }
 
-  /* Modal de exercício extra */
+  /* Modal detalhe histórico */
+  .hist-detail-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+  }
+  .hist-detail-overlay.open { display: block; }
+  .hist-detail-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+  }
+  .hist-detail-panel {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: var(--bg);
+    border-top: 2px solid var(--accent);
+    max-height: 92vh;
+    overflow-y: auto;
+    padding: 0 0 40px;
+  }
+  .hist-detail-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px 10px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    z-index: 1;
+  }
+  .hist-detail-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .hist-detail-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--font-display);
+    font-size: 14px;
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .hist-detail-btn.primary {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-op);
+  }
+  /* Card exportável */
+  #hist-export-card {
+    padding: 16px;
+  }
+  .hd-header {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .hd-title {
+    font-family: var(--font-display);
+    font-size: 26px;
+    color: var(--accent);
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+  .hd-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .hd-meta span { display: flex; align-items: center; gap: 4px; }
+  .hd-comment {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text);
+    font-style: italic;
+    padding: 8px 10px;
+    background: var(--surface2);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+  .hd-ex-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .hd-ex-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .hd-series {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .hd-serie-pill {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) * 3);
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .hd-serie-pill.has-value {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-op);
+  }
+  .hd-watermark {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
   .add-ex-btn {
     display: none;
     width: 100%;
@@ -1100,6 +1226,7 @@
   .table-schedule td { padding: 8px 4px; border-bottom: 1px solid var(--border); }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -1211,6 +1338,21 @@
     <button class="tab active" id="tab-btn-welcome" onclick="showTab('welcome', this)">INÍCIO</button>
     <button class="tab" onclick="showTab('extra', this)" style="border-color: var(--accent2); color: var(--accent2)">EXTRA</button>
     <button class="tab" onclick="showTab('hist', this)" style="border-color: var(--safe); color: var(--safe)">HISTÓRICO</button>
+  </div>
+</div>
+
+<!-- Modal Detalhe Histórico -->
+<div class="hist-detail-overlay" id="hist-detail-overlay">
+  <div class="hist-detail-backdrop" onclick="closeHistDetail()"></div>
+  <div class="hist-detail-panel">
+    <div class="hist-detail-toolbar">
+      <div style="font-family:var(--font-display);font-size:16px;color:var(--muted);">RESUMO DO TREINO</div>
+      <div class="hist-detail-actions">
+        <button class="hist-detail-btn primary" onclick="exportHistDetail()">📸 Salvar Imagem</button>
+        <button class="hist-detail-btn" onclick="closeHistDetail()">✕</button>
+      </div>
+    </div>
+    <div id="hist-export-card"></div>
   </div>
 </div>
 
@@ -2270,14 +2412,14 @@ function buildTreinoTabHtml(tabId, nome, exs) {
       <div class="treino-title"><span>Importado via CSV</span>${nome.toUpperCase()}</div>
       <div class="treino-meta"><div class="badge badge-yellow">CSV</div></div>
     </div>
-    <div class="gym-panel">
-      <label class="gym-label">📍 Onde você está treinando hoje? (opcional)</label>
-      <input type="text" class="gym-input" placeholder="Ex: Smart Fit Centro...">
-    </div>
     <button class="action-btn" onclick="toggleWorkout('${tabId}')">Iniciar ${nome}</button>
     <div class="timer-bar" id="timer-${tabId}">
       <div><div class="timer-label">⏱ Em andamento</div></div>
       <div class="timer-display" id="timer-display-${tabId}">00:00</div>
+    </div>
+    <div class="gym-panel" style="display:none;">
+      <label class="gym-label">📍 Onde você está treinando hoje? (opcional)</label>
+      <input type="text" class="gym-input" placeholder="Ex: Smart Fit Centro...">
     </div>
     ${sectionsHtml}
     <button class="add-ex-btn" id="add-ex-btn-${tabId}" onclick="openAddEx('${tabId}')">+ Adicionar Exercício</button>
@@ -2522,6 +2664,7 @@ function restoreActiveWorkout() {
   btn.style.display = 'none';
   const concludeBtn = container.querySelector('#conclude-btn-' + letter);
   if (concludeBtn) { concludeBtn.style.display = 'block'; concludeBtn.classList.add('active-run'); }
+  gymPanel.style.display = 'block';
   const commentPanel = container.querySelector('.session-comment-panel');
   if (commentPanel) commentPanel.style.display = 'block';
   cards.forEach(c => c.classList.add('active-workout'));
@@ -2797,6 +2940,96 @@ function confirmarAddEx() {
   showToast(nome + ' adicionado! ✓');
 }
 
+// -- DETALHE DO HISTÓRICO --
+function openHistDetail(idx) {
+  const history = JSON.parse(localStorage.getItem('workout_history') || '[]');
+  const item = history[idx];
+  if (!item) return;
+
+  const card = document.getElementById('hist-export-card');
+  const lines = (item.details || '').split('\n');
+
+  // Separa exercícios, duração e comentário
+  const exLines = lines.filter(l => l.startsWith('•'));
+  const duracaoLine = lines.find(l => l.startsWith('⏱')) || '';
+  const comentarioLine = lines.find(l => l.startsWith('💬')) || '';
+  const duracao = duracaoLine.replace('⏱ Duração total:', '').trim();
+  const comentario = comentarioLine.replace('💬', '').trim();
+
+  // Monta os cards de exercício
+  const exCards = exLines.map(line => {
+    const match = line.match(/^•\s+(.+?)\s+->\s+(.+)$/);
+    if (!match) return '';
+    const nome = match[1];
+    const series = match[2].split('|').map(s => s.trim());
+    const pills = series.map(s => {
+      const hasValue = !s.includes('Completo');
+      return `<span class="hd-serie-pill ${hasValue ? 'has-value' : ''}">${s}</span>`;
+    }).join('');
+    return `<div class="hd-ex-card">
+      <div class="hd-ex-name">${nome}</div>
+      <div class="hd-series">${pills}</div>
+    </div>`;
+  }).join('');
+
+  const p = JSON.parse(localStorage.getItem('app_profile') || '{}');
+  const nomeUser = [p.nome, p.sobrenome].filter(Boolean).join(' ') || 'ViWorkout';
+
+  card.innerHTML = `
+    <div class="hd-header">
+      <div class="hd-title">${item.title}</div>
+      <div class="hd-meta">
+        <span>📅 ${item.date}</span>
+        ${item.gym ? `<span>📍 ${item.gym}</span>` : ''}
+        ${duracao ? `<span>⏱ ${duracao}</span>` : ''}
+      </div>
+      ${comentario ? `<div class="hd-comment">💬 ${comentario}</div>` : ''}
+    </div>
+    ${exCards}
+    <div class="hd-watermark">VIWORKOUT · ${nomeUser.toUpperCase()}</div>`;
+
+  document.getElementById('hist-detail-overlay').classList.add('open');
+}
+
+function closeHistDetail() {
+  document.getElementById('hist-detail-overlay').classList.remove('open');
+}
+
+function exportHistDetail() {
+  const card = document.getElementById('hist-export-card');
+  if (!card) return;
+  showToast('Gerando imagem...', 'var(--accent)');
+
+  const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0f0f0f';
+
+  html2canvas(card, {
+    backgroundColor: bgColor,
+    scale: 2,
+    useCORS: true,
+    logging: false,
+  }).then(canvas => {
+    // Tenta download direto
+    try {
+      const link = document.createElement('a');
+      link.download = 'treino-' + Date.now() + '.png';
+      link.href = canvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('Imagem salva! ✓');
+    } catch(e) {
+      // Fallback: abre em nova aba
+      const win = window.open();
+      win.document.write('<img src="' + canvas.toDataURL('image/png') + '" style="max-width:100%">');
+      win.document.close();
+      showToast('Pressione e segure a imagem pra salvar ✓');
+    }
+  }).catch(err => {
+    console.error('html2canvas error:', err);
+    showToast('Erro ao gerar imagem.', 'var(--danger)');
+  });
+}
+
 function showTab(name, btn) {
   document.querySelectorAll('.treino').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -2882,6 +3115,7 @@ function toggleWorkout(letter) {
     btn.style.display = 'none';
     const concludeBtn = container.querySelector('#conclude-btn-' + letter) || container.querySelector('.action-btn:last-of-type');
     if (concludeBtn) { concludeBtn.style.display = 'block'; concludeBtn.classList.add('active-run'); }
+    gymPanel.style.display = 'block';
     const commentPanel = container.querySelector('.session-comment-panel');
     if (commentPanel) commentPanel.style.display = 'block';
     gymInput.value = '';
@@ -2954,6 +3188,7 @@ function toggleWorkout(letter) {
     container.querySelectorAll('.ex-card[data-extra="true"]').forEach(c => c.remove());
     // Restaura botão de iniciar, esconde botão de concluir
     btn.style.display = 'block';
+    gymPanel.style.display = 'none';
     const concludeBtn2 = container.querySelector('[id^="conclude-btn-"]');
     if (concludeBtn2) { concludeBtn2.style.display = 'none'; concludeBtn2.classList.remove('active-run'); }
     const commentPanel2 = container.querySelector('.session-comment-panel');
@@ -3020,8 +3255,8 @@ function renderHistory() {
     return;
   }
 
-  container.innerHTML = history.map(item => `
-    <div class="history-item clearfix ${item.isExtra ? 'extra-item' : ''}">
+  container.innerHTML = history.map((item, idx) => `
+    <div class="history-item clearfix ${item.isExtra ? 'extra-item' : ''}" onclick="openHistDetail(${idx})" style="cursor:pointer;">
       <div class="history-date">${item.date}</div>
       ${item.isExtra ? '<div class="history-type-tag">Atividade Extra</div>' : ''}
       <div class="history-gym">📍 ${item.gym || 'Academia'}</div>
